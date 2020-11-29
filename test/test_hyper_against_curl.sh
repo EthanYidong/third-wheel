@@ -18,6 +18,6 @@ cargo run --example hyper_proxy -- -p 8080 &
 echo "Sleeping to let mitm wake up"
 sleep 1
 
-curl -x 127.0.0.1:8080 --cacert ./ca/ca_certs/cert.pem https://www.example.com | grep 'Hello world' && echo "Everything worked as expected" || echo "There was a problem with curl"
+curl -x 127.0.0.1:8080 --cacert ./ca/ca_certs/cert.pem https://www.example.com | grep 'This domain is for use in illustrative examples in documents' && echo "Everything worked as expected" || echo "There was a problem with curl"
 
 popd

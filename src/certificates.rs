@@ -141,7 +141,6 @@ pub(crate) fn spoof_certificate(
     certificate: &X509,
     ca: &CertificateAuthority,
 ) -> Result<X509, Error> {
-    print_certificate(certificate);
     let mut cert_builder = X509::builder()?;
 
     let name: &X509NameRef = certificate.subject_name();
@@ -173,10 +172,7 @@ pub(crate) fn spoof_certificate(
     cert_builder.set_pubkey(&ca.key)?;
     cert_builder.sign(&ca.key, MessageDigest::sha256())?;
 
-
-    let new_cert = cert_builder.build();
-    print_certificate(&new_cert);
-    Ok(new_cert)
+    Ok(cert_builder.build())
 }
 
 #[allow(dead_code)]

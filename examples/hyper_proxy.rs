@@ -41,7 +41,7 @@ impl MitmLayer for EmptyCapturer {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    SimpleLogger::new().init().unwrap();
+//    SimpleLogger::new().init().unwrap();
     let args: StartMitm = argh::from_env();
     let ca = CertificateAuthority::load_from_pem_files(&args.cert_file, &args.key_file)?;
     info!("Hello from the logs");

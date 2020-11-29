@@ -1,10 +1,11 @@
+use hyper::client::conn::Builder;
 use hyper::server::conn::Http;
 use hyper::upgrade::Upgraded;
-use log::debug;
 use openssl::x509::X509;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 
 use log::info;
 
@@ -41,11 +42,31 @@ async fn upgraded_server(
     let identity = native_identity(&certificate, &ca.key)?;
     let client = TlsAcceptor::from(native_tls::TlsAcceptor::new(identity)?);
     let client_stream = client.accept(upgraded).await?;
-    // TODO: convert target_stream into a hyper::client::conn::SendRequest or something like that
-    // Then make the service_fn actually forwards the requests and return the responses
+
+    let remote = Builder::new()
+        .handshake::<TlsStream<TcpStream>, Body>(target_stream)
+        .await?;
+    let connection = remote.1;
+    // TODO: will this run forever? Is this essentially a memory leak?
+    tokio::spawn(connection.without_shutdown());
+
+    let send_request = Arc::new(Mutex::new(remote.0));
 
     Http::new()
-        .serve_connection(client_stream, service_fn(hello_world_responder))
+        .serve_connection(
+            client_stream,
+            service_fn(move |req: Request<Body>| {
+                let shared_sender = send_request.clone();
+                async move {
+                    log::debug!("About to send request to target {} {}", req.method(), req.uri());
+                    let mut send_request_unlocked = shared_sender.lock().await;
+                    log::debug!("Received lock");
+                    let response = send_request_unlocked.send_request(req).await.unwrap();
+                    log::debug!("Response received: {}", response.status());
+                    Ok::<Response<Body>, Infallible>(response)
+                }
+            }),
+        )
         .await
         .map_err(|err| err.into())
 }
@@ -86,11 +107,11 @@ where
                     // after the currently running function finishes so we need
                     // to spawn it as a separate future.
                     let ca = ca.clone();
-                    let (host,port) = target_host_port_from_connect(&req).unwrap();
+                    let (host, port) = target_host_port_from_connect(&req).unwrap();
                     tokio::task::spawn(async move {
                         match req.into_body().on_upgrade().await {
                             Ok(upgraded) => {
-                                if let Err(e) = upgraded_server(upgraded,ca, &host, &port).await {
+                                if let Err(e) = upgraded_server(upgraded, ca, &host, &port).await {
                                     error!("Proxy failed: {}", e)
                                 }
                             }
@@ -133,7 +154,6 @@ async fn connect_to_target_with_tls(
 
     Ok((target_stream, certificate))
 }
-
 
 fn target_host_port_from_connect(request: &Request<Body>) -> Result<(String, String), Error> {
     let host = request
