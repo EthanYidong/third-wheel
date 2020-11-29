@@ -40,7 +40,6 @@
 mod certificates;
 mod proxy;
 
-mod codecs;
 mod error;
 
 pub use crate::certificates::create_signed_certificate_for_domain;
@@ -48,4 +47,5 @@ pub use crate::certificates::CertificateAuthority;
 pub use proxy::mitm::{MitmLayer, RequestCapture, ResponseCapture};
 pub use proxy::start_mitm;
 pub use error::Error;
-pub use crate::codecs::hyper_codec::*;
+
+pub extern crate hyper;
