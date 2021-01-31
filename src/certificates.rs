@@ -1,5 +1,6 @@
 use log::debug;
 use std::fs::File;
+use log::info;
 use std::io;
 
 use openssl::asn1::Asn1Time;
@@ -28,6 +29,7 @@ impl CertificateAuthority {
         cert_file: &str,
         key_file: &str,
     ) -> Result<Self, Error> {
+        info!("Loading certificate authority from provided files");
         let mut cert_file = File::open(cert_file)?;
         let mut cert: Vec<u8> = vec![];
         io::copy(&mut cert_file, &mut cert)?;
@@ -36,7 +38,7 @@ impl CertificateAuthority {
         let mut key_file = File::open(key_file)?;
         let mut key: Vec<u8> = vec![];
         io::copy(&mut key_file, &mut key)?;
-        let key = PKey::from_rsa(Rsa::private_key_from_pem(&key)?)?;
+        let key = PKey::from_rsa(Rsa::private_key_from_pem_passphrase(&key, &"third-wheel".as_bytes())?)?;
 
         Ok(CertificateAuthority { cert, key })
     }
@@ -44,9 +46,9 @@ impl CertificateAuthority {
 
 pub(crate) fn native_identity(certificate: &X509, key: &PKey<Private>) -> Result<native_tls::Identity, Error> {
     let pkcs = Pkcs12::builder()
-        .build(&"", &"", key, certificate)?
+        .build(&"third-wheel", &"", key, certificate)?
         .to_der()?;
-    let identity = native_tls::Identity::from_pkcs12(&pkcs, &"")?;
+    let identity = native_tls::Identity::from_pkcs12(&pkcs, &"third-wheel")?;
     Ok(identity)
 }
 
@@ -81,12 +83,6 @@ pub fn create_signed_certificate_for_domain(
         .dns(domain)
         .build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
     cert_builder.append_extension(subject_alternative_name)?;
-
-    let authority_key_identifier = AuthorityKeyIdentifier::new()
-        .keyid(false)
-        .issuer(false)
-        .build(&cert_builder.x509v3_context(Some(&ca.cert), None))?;
-    cert_builder.append_extension(authority_key_identifier)?;
 
     cert_builder.set_issuer_name(&ca.cert.issuer_name())?;
     cert_builder.set_pubkey(&ca.key)?;
